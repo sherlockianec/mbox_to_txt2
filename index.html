@@ -1,1102 +1,822 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>MBOX → TXT — Local Converter</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; style-src 'unsafe-inline'; worker-src blob:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
+<title>Mbox Email Extractor — runs entirely offline</title>
 <style>
-  :root {
-    --paper: #efeee2;
-    --paper-card: #f8f7ee;
-    --surround: #d9d7c5;
-    --stripe: #e2e8da;
-    --ink: #1e2a22;
-    --pine: #1f5c42;
-    --pine-deep: #163f2e;
-    --stamp: #a23b2e;
-    --muted: #6b7268;
-    --line: #c9c7b4;
-    --mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code',
-      Menlo, Consolas, 'Roboto Mono', monospace;
+  :root{
+    --paper:#EAF1F5;
+    --card:#FBFCFD;
+    --ink:#1B2430;
+    --ink-soft:#3C4A5C;
+    --blue:#2C5F8A;
+    --blue-deep:#1D4265;
+    --red:#C0392B;
+    --slate:#5C6B73;
+    --line:#C7D5DD;
+    --green:#2E7D53;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, "Courier New", monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--mono);
+    line-height:1.55;
+    padding:32px 16px 64px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .stripe{
+    height:8px;
+    background:repeating-linear-gradient(-45deg,
+      var(--red) 0 14px, var(--card) 14px 20px,
+      var(--blue) 20px 34px, var(--card) 34px 40px);
+    border-radius:3px;
+  }
+  .wrap{max-width:700px;margin:0 auto;}
+  header{margin:22px 0 28px;}
+  .eyebrow{
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--blue-deep); font-weight:700; margin:0 0 6px;
+  }
+  h1{
+    font-size:26px; margin:0 0 10px; letter-spacing:-0.01em;
+    font-weight:800; color:var(--ink);
+  }
+  .tagline{color:var(--ink-soft); font-size:14px; margin:0 0 16px; max-width:56ch;}
+  .privacy{
+    display:flex; gap:10px; align-items:flex-start;
+    border:1px solid var(--line); background:var(--card);
+    border-radius:8px; padding:12px 14px; font-size:12.5px; color:var(--ink-soft);
+  }
+  .privacy b{color:var(--green);}
+  .privacy svg{flex:none; margin-top:1px;}
+
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:22px; margin-top:20px;
+  }
+  .field{margin-bottom:18px;}
+  .field:last-child{margin-bottom:0;}
+  label{display:block; font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px;}
+  .hint{color:var(--slate); font-size:12px; margin-top:5px;}
+
+  .filebtn{
+    display:flex; align-items:center; gap:10px;
+    border:2px dashed var(--line); border-radius:8px; padding:16px;
+    cursor:pointer; background:#fff; transition:border-color .15s, background .15s;
+  }
+  .filebtn:hover{border-color:var(--blue);}
+  .filebtn.has-file{border-style:solid; border-color:var(--blue);}
+  #file-input{
+    position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+  }
+  .filebtn .fname{font-size:13px; color:var(--ink); word-break:break-all;}
+  .filebtn .fmeta{font-size:11.5px; color:var(--slate); margin-top:2px;}
+  .filebtn .icon{flex:none;}
+
+  .row2{display:flex; gap:14px;}
+  .row2 > div{flex:1;}
+  input[type=date], input[type=number]{
+    width:100%; font-family:var(--mono); font-size:13.5px;
+    border:1px solid var(--line); border-radius:6px; padding:9px 10px;
+    background:#fff; color:var(--ink);
+  }
+  input:focus-visible, .filebtn:focus-within, button:focus-visible, summary:focus-visible{
+    outline:2px solid var(--blue); outline-offset:2px;
   }
 
-  * { box-sizing: border-box; }
+  details{margin-top:2px;}
+  summary{cursor:pointer; font-size:12.5px; color:var(--blue-deep); font-weight:700; user-select:none;}
+  details .field{margin-top:14px;}
 
-  html, body {
-    margin: 0;
-    padding: 0;
+  .go{
+    width:100%; margin-top:22px; padding:13px 16px; border:none; border-radius:8px;
+    background:var(--blue-deep); color:#fff; font-family:var(--mono);
+    font-size:14px; font-weight:700; letter-spacing:.03em; cursor:pointer;
+    transition:background .15s, transform .05s;
   }
+  .go:hover:not(:disabled){background:var(--blue);}
+  .go:active:not(:disabled){transform:translateY(1px);}
+  .go:disabled{background:var(--line); color:var(--slate); cursor:not-allowed;}
 
-  body {
-    background: var(--surround);
-    font-family: var(--mono);
-    color: var(--ink);
-    line-height: 1.55;
-    padding: 32px 14px;
-    min-height: 100vh;
+  .log{
+    margin-top:18px; background:var(--ink); color:#DCE6EC; border-radius:8px;
+    padding:14px 16px; font-size:12px; line-height:1.7; max-height:220px; overflow-y:auto;
+    display:none; white-space:pre-wrap; word-break:break-word;
   }
+  .log.show{display:block;}
+  .log .l-err{color:#F2A29A;}
+  .log .l-ok{color:#8FD3B0;}
 
-  .sheet {
-    position: relative;
-    max-width: 720px;
-    margin: 0 auto;
-    background: var(--paper);
-    border: 1px solid var(--line);
-    box-shadow: 0 2px 0 var(--line), 0 18px 32px -20px rgba(30, 42, 34, 0.45);
-  }
+  .bar{height:6px; background:#2A3648; border-radius:3px; overflow:hidden; margin-bottom:10px;}
+  .bar > i{display:block; height:100%; width:0%; background:var(--blue); transition:width .2s;}
 
-  .sprocket {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 26px;
-    background-image: radial-gradient(circle, var(--surround) 3.4px, transparent 4px);
-    background-size: 100% 22px;
-    background-position: center top;
-    opacity: 0.9;
+  .result{display:none; margin-top:20px;}
+  .result.show{display:block;}
+  .stamp-row{display:flex; gap:20px; align-items:center; flex-wrap:wrap;}
+  .stats{flex:1; min-width:220px; font-size:12.5px; color:var(--ink-soft);}
+  .stats div{display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px dotted var(--line);}
+  .stats b{color:var(--ink); font-weight:700;}
+  .dl{
+    display:inline-flex; align-items:center; gap:8px; margin-top:16px;
+    background:var(--green); color:#fff; text-decoration:none; font-family:var(--mono);
+    font-weight:700; font-size:13.5px; padding:11px 18px; border-radius:7px;
   }
-  .sprocket-left { left: 0; }
-  .sprocket-right { right: 0; }
+  .dl:hover{filter:brightness(1.08);}
 
-  .content {
-    padding: 40px 58px 32px;
-  }
+  footer{margin-top:30px; font-size:11.5px; color:var(--slate); text-align:center;}
+  footer a{color:var(--blue-deep);}
 
-  header.masthead h1 {
-    font-size: 2.15rem;
-    letter-spacing: 0.01em;
-    margin: 0;
-    font-weight: 700;
-  }
-  header.masthead .arrow-glyph { color: var(--pine); }
-  header.masthead .tagline {
-    color: var(--muted);
-    font-size: 0.92rem;
-    margin: 8px 0 0;
-  }
-
-  .stamp {
-    display: inline-block;
-    border: 2px solid var(--pine);
-    color: var(--pine);
-    padding: 6px 14px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.09em;
-    transform: rotate(-1.4deg);
-    border-radius: 3px;
-    margin: 20px 6px 26px 0;
-  }
-  .period-stamp {
-    border-color: var(--stamp);
-    color: var(--stamp);
-    transform: rotate(1.1deg);
-  }
-  .stamp-row { display: flex; flex-wrap: wrap; align-items: flex-start; }
-
-  .boundary-panel {
-    border: 1.5px dashed var(--muted);
-    border-radius: 4px;
-    padding: 18px 20px 16px;
-    margin-bottom: 30px;
-  }
-  .boundary-label {
-    font-size: 0.68rem;
-    letter-spacing: 0.1em;
-    color: var(--muted);
-    text-transform: uppercase;
-    margin-bottom: 14px;
-  }
-  .pipeline {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .stage {
-    flex: 1 1 0;
-    min-width: 66px;
-    border: 1.5px solid var(--line);
-    background: var(--paper-card);
-    padding: 10px 4px;
-    text-align: center;
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    color: var(--muted);
-    border-radius: 3px;
-    transition: color 0.2s, border-color 0.2s, background 0.2s;
-  }
-  .stage.active {
-    color: var(--paper-card);
-    background: var(--pine);
-    border-color: var(--pine-deep);
-  }
-  .arrow { color: var(--muted); font-size: 1rem; padding: 0 2px; }
-  .tear-line {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 16px;
-    color: var(--stamp);
-    font-size: 0.68rem;
-    letter-spacing: 0.04em;
-  }
-  .tear-line .dash { flex: 1; border-top: 1.5px dashed var(--stamp); opacity: 0.55; }
-
-  .dropzone {
-    border: 2px dashed var(--line);
-    border-radius: 4px;
-    padding: 38px 20px;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-  }
-  .dropzone.dragover { border-color: var(--pine); background: var(--stripe); }
-  .dropzone .drop-main { margin: 0 0 10px; font-weight: 700; letter-spacing: 0.04em; }
-  .dropzone .or { color: var(--muted); font-size: 0.78rem; margin: 0 0 14px; }
-
-  button {
-    font-family: var(--mono);
-    font-size: 0.82rem;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    padding: 12px 20px;
-    border-radius: 3px;
-    cursor: pointer;
-    border: 1.5px solid var(--ink);
-    background: transparent;
-    color: var(--ink);
-  }
-  .primary-btn { background: var(--pine); color: #fff; border-color: var(--pine-deep); }
-  .primary-btn:hover { background: var(--pine-deep); }
-  .secondary-btn:hover { background: var(--stripe); }
-  .big-btn { width: 100%; margin-top: 18px; padding: 14px 20px; font-size: 0.88rem; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  button:focus-visible, input:focus-visible, summary:focus-visible {
-    outline: 3px solid var(--pine);
-    outline-offset: 2px;
-  }
-
-  .file-info { margin-top: 22px; }
-  .manifest-line {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    border-bottom: 1px dotted var(--line);
-    padding: 7px 0;
-    font-size: 0.86rem;
-  }
-  .manifest-line span:first-child {
-    color: var(--muted);
-    letter-spacing: 0.08em;
-    font-size: 0.68rem;
-    white-space: nowrap;
-    padding-top: 3px;
-  }
-  .manifest-line span:last-child { text-align: right; word-break: break-word; }
-
-  .option-row {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    margin: 16px 0 4px;
-    font-size: 0.82rem;
-    cursor: pointer;
-  }
-  .option-row input { accent-color: var(--pine); width: 15px; height: 15px; flex-shrink: 0; }
-
-  .engine-note {
-    color: var(--muted);
-    font-size: 0.76rem;
-    margin: 10px 0 0;
-    line-height: 1.5;
-  }
-
-  .progress-track {
-    height: 22px;
-    border: 1.5px solid var(--ink);
-    border-radius: 2px;
-    overflow: hidden;
-    background: var(--paper-card);
-    margin: 4px 0 10px;
-  }
-  .progress-fill {
-    height: 100%;
-    background: var(--pine);
-    width: 0%;
-    transition: width 0.2s ease-out;
-  }
-  .progress-stats { font-size: 0.8rem; color: var(--muted); margin: 0 0 16px; }
-
-  .log-window {
-    background: var(--ink);
-    color: #a9d9bd;
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    padding: 12px 14px;
-    height: 168px;
-    overflow-y: auto;
-    border-radius: 3px;
-    margin: 0 0 18px;
-    white-space: pre-wrap;
-    word-break: break-all;
-  }
-
-  .done-stamp, .error-stamp {
-    display: inline-block;
-    font-size: 1.3rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    border: 3px solid var(--pine);
-    color: var(--pine);
-    padding: 8px 20px;
-    border-radius: 4px;
-    transform: rotate(-2deg);
-    margin-bottom: 20px;
-  }
-  .error-stamp { border-color: var(--stamp); color: var(--stamp); }
-  .warning-text { color: var(--stamp); font-size: 0.85rem; }
-
-  #view-done button, #view-error button { margin-top: 10px; }
-
-  footer { margin-top: 34px; }
-  footer details {
-    font-size: 0.8rem;
-    color: var(--muted);
-    border-top: 1px dotted var(--line);
-    padding-top: 14px;
-  }
-  footer summary { cursor: pointer; color: var(--ink); font-weight: 700; letter-spacing: 0.03em; }
-  footer p { margin: 10px 0 0; line-height: 1.6; }
-
-  @media (max-width: 620px) {
-    .content { padding: 30px 22px 24px; }
-    header.masthead h1 { font-size: 1.7rem; }
-    .stage { font-size: 0.68rem; min-width: 76px; }
-    .sprocket { display: none; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .progress-fill, .stage, .dropzone { transition: none; }
+  @media (max-width:480px){
+    .row2{flex-direction:column;}
+    h1{font-size:22px;}
   }
 </style>
 </head>
 <body>
-  <div class="sheet">
-    <div class="sprocket sprocket-left" aria-hidden="true"></div>
-    <div class="sprocket sprocket-right" aria-hidden="true"></div>
-    <div class="content">
+<div class="wrap">
+  <div class="stripe"></div>
+  <header>
+    <p class="eyebrow">Local mbox tool · no server · no upload</p>
+    <h1>Mbox Email Extractor</h1>
+    <p class="tagline">Pick a date range, get back a clean plain-text file of just those emails — subject, date, sender, recipient, attachment names, and body text. Nothing else.</p>
+    <div class="privacy">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2E7D53" stroke-width="2.4"><path d="M12 2 4 5v6c0 5 3.4 8.7 8 9 4.6-.3 8-4 8-9V5l-8-3Z"/><path d="m8.5 12 2.5 2.5 4.5-4.5"/></svg>
+      <div><b>Everything happens on this device.</b> The file is read locally by your browser and never leaves it — this page makes no network requests at all (try it with Wi-Fi off). Close the tab when you're done and nothing is kept.</div>
+    </div>
+  </header>
 
-      <header class="masthead">
-        <h1>MBOX <span class="arrow-glyph">→</span> TXT</h1>
-        <p class="tagline">Turns one period of an email archive into readable text. Runs entirely in this browser tab.</p>
-      </header>
+  <div class="card">
+    <div class="field">
+      <label for="file-input">Mbox file</label>
+      <label class="filebtn" id="filebtn" for="file-input">
+        <svg class="icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2C5F8A" stroke-width="1.8"><path d="M4 4h11l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M15 4v5h5"/></svg>
+        <span id="filetext">
+          <span class="fname" id="fname">Choose your .mbox file…</span>
+          <div class="fmeta" id="fmeta">Nothing is uploaded — this only reads the file into your browser's memory.</div>
+        </span>
+      </label>
+      <input type="file" id="file-input" accept=".mbox,.mbx,text/plain,application/mbox">
+    </div>
 
-      <div class="stamp-row">
-        <div class="stamp">100% LOCAL — NOTHING IS UPLOADED</div>
-        <div class="stamp period-stamp">PERIOD: MAR 1 – AUG 31, 2026</div>
+    <div class="field row2">
+      <div>
+        <label for="date-from">From date</label>
+        <input type="date" id="date-from">
       </div>
+      <div>
+        <label for="date-to">To date</label>
+        <input type="date" id="date-to">
+      </div>
+    </div>
 
-      <section class="boundary-panel">
-        <div class="boundary-label">◈ Your device — everything below happens here</div>
-        <div class="pipeline">
-          <div class="stage" data-stage="read">1 READ</div>
-          <div class="arrow">→</div>
-          <div class="stage" data-stage="filter">2 FILTER</div>
-          <div class="arrow">→</div>
-          <div class="stage" data-stage="decode">3 DECODE</div>
-          <div class="arrow">→</div>
-          <div class="stage" data-stage="write">4 WRITE</div>
-        </div>
-        <div class="tear-line" aria-hidden="true">
-          <span class="dash"></span>
-          <span>✕ zero network requests — verify anytime in dev tools</span>
-          <span class="dash"></span>
-        </div>
-      </section>
+    <details>
+      <summary>Advanced options</summary>
+      <div class="field">
+        <label for="max-chars">Max characters kept per email body</label>
+        <input type="number" id="max-chars" value="20000" min="500" step="500">
+        <div class="hint">Guards against one huge thread bloating the output. Leave blank for no limit.</div>
+      </div>
+    </details>
 
-      <section id="view-ready" class="view">
-        <div class="dropzone" id="dropzone">
-          <p class="drop-main">DROP .MBOX FILE HERE</p>
-          <p class="or">or</p>
-          <button type="button" id="pickFileBtn" class="primary-btn">SELECT FILE</button>
-          <input type="file" id="fileInput" accept=".mbox,.mbx,.txt" hidden />
-        </div>
+    <button class="go" id="go-btn" disabled>Choose a file to begin</button>
 
-        <div class="file-info" id="fileInfo" hidden>
-          <div class="manifest-line"><span>FILE</span><span id="fileNameOut"></span></div>
-          <div class="manifest-line"><span>SIZE</span><span id="fileSizeOut"></span></div>
-          <div class="manifest-line"><span>PERIOD</span><span>Mar 1, 2026 → Aug 31, 2026</span></div>
-          <label class="option-row">
-            <input type="checkbox" id="includeAllHeaders" />
-            <span>Include full raw headers for each message</span>
-          </label>
-          <p class="engine-note" id="engineNote"></p>
-          <button type="button" id="convertBtn" class="primary-btn big-btn">CONVERT</button>
-        </div>
-      </section>
+    <div class="bar" id="bar" style="display:none;"><i id="bar-fill"></i></div>
+    <div class="log" id="log"></div>
 
-      <section id="view-progress" class="view" hidden>
-        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
-        <p class="progress-stats" id="progressStats">0 B / 0 B · 0 of 0 in period</p>
-        <pre class="log-window" id="logWindow"></pre>
-        <button type="button" id="cancelBtn" class="secondary-btn">CANCEL</button>
-      </section>
-
-      <section id="view-done" class="view" hidden>
-        <div class="done-stamp">COMPLETE</div>
-        <div id="doneStats"></div>
-        <button type="button" id="resetBtn" class="primary-btn">CONVERT ANOTHER FILE</button>
-      </section>
-
-      <section id="view-error" class="view" hidden>
-        <div class="error-stamp">STOPPED</div>
-        <p id="errorMessage"></p>
-        <button type="button" id="errorResetBtn" class="secondary-btn">TRY AGAIN</button>
-      </section>
-
-      <footer>
-        <details>
-          <summary>How this works</summary>
-          <p>
-            This page reads your file in memory a few megabytes at a time. Each message's date is
-            checked against the fixed period (March 1 – August 31, 2026, your computer's local time)
-            before anything else is done with it — messages outside that period are skipped and never
-            decoded or written out. Messages inside the period are converted and written either straight
-            to a file you choose (Chrome or Edge on a computer) or to a normal download (other browsers).
-            No part of the file is ever sent anywhere — there is no server behind this page, only the
-            code running in this tab. Attachments are listed by name and size rather than included, to
-            keep the output readable. View this page's source at any time to check for yourself.
-          </p>
-        </details>
-      </footer>
-
+    <div class="result" id="result">
+      <div class="stamp-row">
+        <svg id="postmark" width="108" height="108" viewBox="0 0 120 120" aria-hidden="true"></svg>
+        <div class="stats" id="stats"></div>
+      </div>
+      <a class="dl" id="dl-link" download="">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><path d="M12 3v13m0 0 5-5m-5 5-5-5"/><path d="M4 20h16"/></svg>
+        <span id="dl-text">Download extracted-emails.txt</span>
+      </a>
     </div>
   </div>
 
-<script>
-// ============================================================
-// Parsing engine (tested independently — see project notes)
-// ============================================================
+  <footer>Runs entirely in this browser tab · works with no internet connection · view-source to verify</footer>
+</div>
 
-function stringToBytes(str) {
-  const bytes = new Uint8Array(str.length);
-  for (let i = 0; i < str.length; i++) {
-    bytes[i] = str.charCodeAt(i) & 0xff;
-  }
-  return bytes;
-}
+<script type="text/plain" id="worker-source">
+// Core mbox parsing logic - pure functions, no DOM/browser APIs except
+// TextDecoder/TextEncoder/atob which are available in both browsers and
+// Node, so this file can be tested standalone with Node before being
+// embedded in the worker.
 
-function bytesToBinaryString(bytes) {
-  const CHUNK = 0x8000;
-  let result = "";
+// True 1:1 byte<->codepoint passthrough decoder. NOTE: TextDecoder('iso-8859-1')
+// cannot be used for this - per the WHATWG Encoding Standard it is actually an
+// alias for windows-1252, which remaps several bytes in 0x80-0x9F to different
+// codepoints (verified empirically while building this). String.fromCharCode
+// with a byte value always yields a code unit numerically equal to that byte,
+// which is the true 1:1 mapping this parser depends on throughout.
+function bytesToRawString(bytes) {
+  const CHUNK = 32768; // conservative, avoids "too many function arguments" limits
+  const parts = [];
   for (let i = 0; i < bytes.length; i += CHUNK) {
-    const sub = bytes.subarray(i, i + CHUNK);
-    result += String.fromCharCode.apply(null, sub);
+    parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK)));
   }
-  return result;
+  return parts.join('');
 }
 
-function decodeQuotedPrintable(str) {
-  const cleaned = str.replace(/=\r\n/g, "").replace(/=\n/g, "");
-  const bytes = [];
-  for (let i = 0; i < cleaned.length; i++) {
-    const c = cleaned[i];
-    if (c === "=" && i + 2 < cleaned.length) {
-      const hex = cleaned.substr(i + 1, 2);
-      if (/^[0-9A-Fa-f]{2}$/.test(hex)) {
-        bytes.push(parseInt(hex, 16));
-        i += 2;
-        continue;
+function bytesToUtf8OrLatin1(rawByteString) {
+  if (!rawByteString) return rawByteString || '';
+  const arr = new Uint8Array(rawByteString.length);
+  for (let i = 0; i < rawByteString.length; i++) arr[i] = rawByteString.charCodeAt(i) & 0xFF;
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(arr);
+  } catch (e) {
+    return new TextDecoder('windows-1252').decode(arr);
+  }
+}
+
+function rawByteStringToBytes(rawByteString) {
+  const arr = new Uint8Array(rawByteString.length);
+  for (let i = 0; i < rawByteString.length; i++) arr[i] = rawByteString.charCodeAt(i) & 0xFF;
+  return arr;
+}
+
+function decodeBytesAs(bytes, charset) {
+  charset = (charset || 'utf-8').trim().toLowerCase().replace(/^"|"$/g, '');
+  if (charset === 'utf8') charset = 'utf-8';
+  if (charset === 'us-ascii' || charset === 'ascii') charset = 'windows-1252';
+  try {
+    return new TextDecoder(charset, { fatal: false }).decode(bytes);
+  } catch (e) {
+    try { return new TextDecoder('utf-8', { fatal: false }).decode(bytes); }
+    catch (e2) { return new TextDecoder('windows-1252').decode(bytes); }
+  }
+}
+
+// ---- quoted-printable: raw-byte-string in, raw-byte-string out ------------
+function qpDecodeToBytes(s) {
+  s = s.replace(/=\r\n|=\n/g, '');
+  const out = [];
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '=' && /^[0-9A-Fa-f]{2}$/.test(s.substr(i + 1, 2))) {
+      out.push(parseInt(s.substr(i + 1, 2), 16));
+      i += 2;
+    } else {
+      out.push(s.charCodeAt(i) & 0xFF);
+    }
+  }
+  return new Uint8Array(out);
+}
+
+// ---- base64: raw-byte-string (base64 text) in, Uint8Array out -------------
+function base64DecodeToBytes(s) {
+  const cleaned = s.replace(/[^A-Za-z0-9+/=]/g, '');
+  if (!cleaned) return new Uint8Array(0);
+  let bin;
+  try { bin = atob(cleaned); } catch (e) { return new Uint8Array(0); }
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// ---- RFC 2047 encoded-word decoder (Subject/From/To) -----------------------
+// Input/output are both "real Unicode" strings (already resolved).
+function decodeRfc2047(x) {
+  if (!x) return x || '';
+  const pattern = /=\?([^?]+)\?([BbQq])\?([^?]*)\?=/;
+  let guard = 0;
+  while (guard++ < 200) {
+    const m = pattern.exec(x);
+    if (!m) break;
+    const charset = m[1], enc = m[2].toUpperCase(), etext = m[3];
+    let decodedPiece;
+    try {
+      let bytes;
+      if (enc === 'B') {
+        bytes = base64DecodeToBytes(etext);
+      } else {
+        bytes = qpDecodeToBytes(etext.replace(/_/g, ' '));
+      }
+      decodedPiece = decodeBytesAs(bytes, charset);
+    } catch (e) {
+      decodedPiece = '?';
+    }
+    x = x.slice(0, m.index) + decodedPiece + x.slice(m.index + m[0].length);
+  }
+  return x;
+}
+
+// ---- crude HTML -> text (regex-based; DOM parsing intentionally avoided -
+// mbox files routinely contain HTML from spam/phishing mail, and running it
+// through a live DOM/innerHTML risks executing embedded scripts or firing
+// event-handler attributes even on detached elements) --------------------
+function htmlToText(html) {
+  html = html.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, '');
+  html = html.replace(/<br\s*\/?>/gi, '\n');
+  html = html.replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n');
+  html = html.replace(/<[^>]+>/g, '');
+  html = html.replace(/&nbsp;/g, ' ')
+             .replace(/&amp;/g, '&')
+             .replace(/&lt;/g, '<')
+             .replace(/&gt;/g, '>')
+             .replace(/&quot;/g, '"')
+             .replace(/&#39;|&apos;/g, "'");
+  html = html.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n');
+  return html.trim();
+}
+
+function cleanWhitespace(x) {
+  x = x.replace(/\r\n/g, '\n');
+  x = x.replace(/[ \t]+\n/g, '\n');
+  x = x.replace(/\n{3,}/g, '\n\n');
+  return x.trim();
+}
+
+// ---- header block parser (folded/continuation lines) -----------------------
+function parseHeaderBlock(headerLines) {
+  const headers = {};
+  let currentName = null;
+  for (const ln of headerLines) {
+    if (/^[ \t]/.test(ln)) {
+      if (currentName) headers[currentName] += ' ' + ln.replace(/^[ \t]+/, '');
+    } else {
+      const colonPos = ln.indexOf(':');
+      if (colonPos > 0) {
+        const name = ln.slice(0, colonPos).trim().toLowerCase();
+        const value = ln.slice(colonPos + 1).replace(/^[ \t]*/, '');
+        headers[name] = value;
+        currentName = name;
       }
     }
-    bytes.push(cleaned.charCodeAt(i) & 0xff);
-  }
-  return new Uint8Array(bytes);
-}
-
-function decodeBase64(str) {
-  const clean = str.replace(/[^A-Za-z0-9+/=]/g, "");
-  if (!clean) return new Uint8Array(0);
-  try {
-    const binary = atob(clean);
-    return stringToBytes(binary);
-  } catch (e) {
-    return new Uint8Array(0);
-  }
-}
-
-function decodeCharset(bytes, charset) {
-  const label = (charset || "utf-8").trim().toLowerCase().replace(/^"|"$/g, "");
-  try {
-    return new TextDecoder(label).decode(bytes);
-  } catch (e) {
-    try {
-      return new TextDecoder("utf-8").decode(bytes);
-    } catch (e2) {
-      return new TextDecoder("windows-1252").decode(bytes);
-    }
-  }
-}
-
-function unfoldHeaderBlock(block) {
-  return block.replace(/\r?\n[ \t]+/g, " ");
-}
-
-function parseHeaders(block) {
-  const unfolded = unfoldHeaderBlock(block);
-  const lines = unfolded.split(/\r?\n/).filter((l) => l.length > 0);
-  const headers = [];
-  for (const line of lines) {
-    const idx = line.indexOf(":");
-    if (idx === -1) continue;
-    const name = line.slice(0, idx).trim();
-    const value = line.slice(idx + 1).trim();
-    headers.push([name, value]);
   }
   return headers;
 }
 
-function getHeader(headers, name) {
-  const found = headers.find(([k]) => k.toLowerCase() === name.toLowerCase());
-  return found ? found[1] : "";
-}
-
-function parseFlexibleDate(str) {
-  if (!str) return null;
-  let d = new Date(str);
-  if (!isNaN(d.getTime())) return d;
-  const stripped = str.replace(/\([^)]*\)\s*$/, "").trim();
-  if (stripped !== str) {
-    d = new Date(stripped);
-    if (!isNaN(d.getTime())) return d;
-  }
-  return null;
-}
-
-function extractMessageMeta(rawMessageText) {
-  const firstNL = rawMessageText.indexOf("\n");
-  const envelopeLine = firstNL === -1 ? rawMessageText : rawMessageText.slice(0, firstNL);
-  const rest = firstNL === -1 ? "" : rawMessageText.slice(firstNL + 1);
-
-  const headerMatch = rest.match(/\r?\n\r?\n/);
-  const headerBlock = headerMatch ? rest.slice(0, headerMatch.index) : rest;
-  const headers = parseHeaders(headerBlock);
-
-  let date = parseFlexibleDate(getHeader(headers, "Date"));
-  if (!date) {
-    const envMatch = envelopeLine.match(/^From\s+\S+\s+(.+)$/);
-    if (envMatch) date = parseFlexibleDate(envMatch[1]);
-  }
-  const subject = decodeRFC2047(getHeader(headers, "Subject"));
-  return { date, subject };
-}
-
-function decodeRFC2047(text) {
-  if (!text || text.indexOf("=?") === -1) return text;
-  const re = /=\?([^?\s]+)\?([BbQq])\?([^?]*)\?=/g;
-  return text.replace(re, (match, charset, enc, encodedText) => {
-    try {
-      let bytes;
-      if (enc.toUpperCase() === "B") {
-        bytes = decodeBase64(encodedText);
-      } else {
-        const qtext = encodedText.replace(/_/g, " ");
-        bytes = decodeQuotedPrintable(qtext);
-      }
-      return decodeCharset(bytes, charset);
-    } catch (e) {
-      return match;
+function getParam(headerValue, paramName) {
+  if (!headerValue) return null;
+  const reExt = new RegExp(paramName + "\\*=\\s*([^;]+)", 'i');
+  const mExt = reExt.exec(headerValue);
+  if (mExt) {
+    let val = mExt[1].replace(/^"|"$/g, '');
+    const parts = val.split("'");
+    if (parts.length === 3) {
+      let decoded;
+      try { decoded = decodeURIComponent(parts[2]); } catch (e) { decoded = parts[2]; }
+      return bytesToUtf8OrLatin1(decoded);
     }
-  });
+    return bytesToUtf8OrLatin1(val);
+  }
+  const re = new RegExp(paramName + '\\s*=\\s*("([^"]*)"|([^;\\s]+))', 'i');
+  const m = re.exec(headerValue);
+  if (!m) return null;
+  const val = m[2] !== undefined && m[2] !== '' ? m[2] : m[3];
+  return decodeRfc2047(bytesToUtf8OrLatin1(val));
 }
 
-function splitHeaderParams(value) {
+function extractFilename(contentDisposition, contentType) {
+  let fn = getParam(contentDisposition, 'filename');
+  if (!fn) fn = getParam(contentType, 'name');
+  return fn;
+}
+
+function peekContentType(partRaw) {
+  const splitPos = partRaw.indexOf('\n\n');
+  const headerText = splitPos === -1 ? partRaw : partRaw.slice(0, splitPos);
+  const headers = parseHeaderBlock(headerText.split('\n'));
+  const ct = headers['content-type'] || 'text/plain';
+  return ct.split(';')[0].trim().toLowerCase();
+}
+
+// decode body: bodyTextRaw is a raw-byte-passthrough string; returns real Unicode
+function decodeBodyContent(bodyTextRaw, cte, charset) {
+  cte = (cte || '7bit').trim().toLowerCase();
+  if (cte === 'base64') {
+    const bytes = base64DecodeToBytes(bodyTextRaw);
+    return decodeBytesAs(bytes, charset);
+  } else if (cte === 'quoted-printable') {
+    const bytes = qpDecodeToBytes(bodyTextRaw);
+    return decodeBytesAs(bytes, charset);
+  } else {
+    return bytesToUtf8OrLatin1(bodyTextRaw);
+  }
+}
+
+// splits a raw-byte-passthrough body string on a MIME boundary
+function splitMultipart(bodyTextRaw, boundary) {
+  const boundaryEsc = boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('(^|\\n)--' + boundaryEsc + '(--)?[ \\t]*\\r?(\\n|$)', 'g');
   const parts = [];
-  let current = "";
-  let inQuotes = false;
-  for (let i = 0; i < value.length; i++) {
-    const c = value[i];
-    if (c === '"') inQuotes = !inQuotes;
-    if (c === ";" && !inQuotes) {
-      parts.push(current);
-      current = "";
-    } else {
-      current += c;
-    }
-  }
-  parts.push(current);
-  return parts.map((s) => s.trim()).filter((s) => s.length > 0);
-}
-
-function parseContentType(value) {
-  if (!value) value = "text/plain; charset=us-ascii";
-  const parts = splitHeaderParams(value);
-  const typePart = parts[0] || "text/plain";
-  const slash = typePart.indexOf("/");
-  let mainType = "text";
-  let subType = "plain";
-  if (slash !== -1) {
-    mainType = typePart.slice(0, slash).trim().toLowerCase();
-    subType = typePart.slice(slash + 1).trim().toLowerCase();
-  }
-  const params = {};
-  for (let i = 1; i < parts.length; i++) {
-    const eq = parts[i].indexOf("=");
-    if (eq === -1) continue;
-    let key = parts[i].slice(0, eq).trim().toLowerCase();
-    let val = parts[i].slice(eq + 1).trim();
-    if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-    params[key] = val;
-  }
-  return { mainType, subType, params };
-}
-
-function parseContentDisposition(value) {
-  if (!value) return null;
-  const parts = splitHeaderParams(value);
-  const disposition = (parts[0] || "").toLowerCase();
-  const params = {};
-  for (let i = 1; i < parts.length; i++) {
-    const eq = parts[i].indexOf("=");
-    if (eq === -1) continue;
-    let key = parts[i].slice(0, eq).trim().toLowerCase();
-    let val = parts[i].slice(eq + 1).trim();
-    if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-    params[key] = val;
-  }
-  return { disposition, params };
-}
-
-function splitMultipart(body, boundary) {
-  const esc = boundary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp("(?:\\r?\\n|^)--" + esc + "(--)?[^\\S\\r\\n]*\\r?\\n?", "g");
-  const delims = [];
+  let lastEnd = null;
   let m;
-  while ((m = re.exec(body)) !== null) {
-    delims.push({ start: m.index, end: m.index + m[0].length, isFinal: !!m[1] });
-    if (m[1]) break;
+  const matches = [];
+  while ((m = re.exec(bodyTextRaw)) !== null) {
+    matches.push({ start: m.index, end: m.index + m[0].length });
     if (m[0].length === 0) re.lastIndex++;
   }
-  const parts = [];
-  for (let i = 0; i < delims.length; i++) {
-    if (delims[i].isFinal) break;
-    const startOfContent = delims[i].end;
-    const endOfContent = i + 1 < delims.length ? delims[i + 1].start : body.length;
-    parts.push(body.slice(startOfContent, endOfContent));
+  if (matches.length === 0) return [bodyTextRaw];
+  for (let i = 0; i < matches.length; i++) {
+    const partStart = matches[i].end;
+    const partEnd = i < matches.length - 1 ? matches[i + 1].start : bodyTextRaw.length;
+    if (partStart <= partEnd) parts.push(bodyTextRaw.slice(partStart, partEnd));
   }
   return parts;
 }
 
-function parseMessagePart(rawText) {
-  const match = rawText.match(/\r?\n\r?\n/);
-  let headerBlock, body;
-  if (match) {
-    headerBlock = rawText.slice(0, match.index);
-    body = rawText.slice(match.index + match[0].length);
-  } else {
-    headerBlock = rawText;
-    body = "";
-  }
-  const headers = parseHeaders(headerBlock);
-  const ctValue = getHeader(headers, "Content-Type") || "text/plain; charset=us-ascii";
-  const contentType = parseContentType(ctValue);
-  const cteValue = getHeader(headers, "Content-Transfer-Encoding") || "7bit";
-  const transferEncoding = cteValue.trim().toLowerCase();
-  const dispositionValue = getHeader(headers, "Content-Disposition");
-  const disposition = parseContentDisposition(dispositionValue);
+// recursive MIME part parser. partRaw is a raw-byte-passthrough string.
+// returns { text: string[] (real Unicode pieces), attachments: string[] }
+function parsePart(partRaw, depth) {
+  depth = depth || 0;
+  if (depth > 15) return { text: [], attachments: [] }; // guard against pathological nesting
+  const splitPos = partRaw.indexOf('\n\n');
+  let headerText, bodyText;
+  if (splitPos === -1) { headerText = partRaw; bodyText = ''; }
+  else { headerText = partRaw.slice(0, splitPos); bodyText = partRaw.slice(splitPos + 2); }
 
-  const part = { headers, contentType, transferEncoding, disposition, rawBody: body, children: null };
+  const headers = parseHeaderBlock(headerText.split('\n'));
+  const ct = headers['content-type'] || 'text/plain';
+  const cte = headers['content-transfer-encoding'] || '7bit';
+  const cd = headers['content-disposition'] || '';
+  const ctMain = ct.split(';')[0].trim().toLowerCase();
+  const charset = getParam(ct, 'charset') || 'utf-8';
 
-  if (contentType.mainType === "multipart" && contentType.params.boundary) {
-    const rawParts = splitMultipart(body, contentType.params.boundary);
-    part.children = rawParts.map((rp) => parseMessagePart(rp));
-  }
-  return part;
-}
+  const result = { text: [], attachments: [] };
+  const filename = extractFilename(cd, ct);
+  if (filename) result.attachments.push(filename);
 
-function decodeTextPartBody(part) {
-  let bytes;
-  if (part.transferEncoding === "base64") {
-    bytes = decodeBase64(part.rawBody);
-  } else if (part.transferEncoding === "quoted-printable") {
-    bytes = decodeQuotedPrintable(part.rawBody);
-  } else {
-    bytes = stringToBytes(part.rawBody);
-  }
-  const charset = part.contentType.params.charset || "utf-8";
-  return decodeCharset(bytes, charset);
-}
-
-function htmlToText(html) {
-  const prepped = html
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|tr|li|h[1-6]|blockquote)>/gi, "$&\n")
-    .replace(/<\/(td|th)>/gi, "$&\t");
-  const doc = new DOMParser().parseFromString(prepped, "text/html");
-  let text = doc.body ? doc.body.textContent : doc.documentElement ? doc.documentElement.textContent : "";
-  text = text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-  return text;
-}
-
-function formatBytes(n) {
-  if (n < 1024) return n + " B";
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
-  return (n / (1024 * 1024)).toFixed(1) + " MB";
-}
-
-function describeAttachment(part) {
-  let filename = "";
-  if (part.disposition && part.disposition.params.filename) filename = part.disposition.params.filename;
-  else if (part.contentType.params.name) filename = part.contentType.params.name;
-  filename = decodeRFC2047(filename) || "(unnamed)";
-  const mime = part.contentType.mainType + "/" + part.contentType.subType;
-  let sizeStr;
-  if (part.transferEncoding === "base64") {
-    const approxBytes = Math.floor((part.rawBody.length * 3) / 4);
-    sizeStr = formatBytes(approxBytes);
-  } else {
-    sizeStr = formatBytes(part.rawBody.length);
-  }
-  return filename + " (" + mime + ", " + sizeStr + ")";
-}
-
-function isAttachmentPart(part) {
-  if (part.disposition && part.disposition.disposition === "attachment") return true;
-  if (part.contentType.mainType === "text") return false;
-  return true;
-}
-
-function extractContent(part, attachments) {
-  const ct = part.contentType;
-  if (ct.mainType === "multipart") {
-    if (ct.subType === "alternative") {
-      let plain = null, html = null, other = null;
-      for (const child of part.children || []) {
-        const cct = child.contentType;
-        if (cct.mainType === "text" && cct.subType === "plain" && !plain) plain = child;
-        else if (cct.mainType === "text" && cct.subType === "html" && !html) html = child;
-        else if (!other) other = child;
-      }
-      if (plain) return extractContent(plain, attachments);
-      if (html) return extractContent(html, attachments);
-      if (other) return extractContent(other, attachments);
-      return "";
-    } else {
-      let text = "";
-      for (const child of part.children || []) {
-        const cct = child.contentType;
-        if (cct.mainType === "multipart") {
-          text += extractContent(child, attachments);
-        } else if (cct.mainType === "text" && !isAttachmentPart(child)) {
-          text += extractContent(child, attachments) + "\n\n";
-        } else if (cct.mainType === "message" && cct.subType === "rfc822") {
-          attachments.push("Embedded email message");
+  if (ctMain.startsWith('multipart/')) {
+    const boundary = getParam(ct, 'boundary');
+    if (boundary) {
+      const subParts = splitMultipart(bodyText, boundary);
+      const subResults = subParts.map(p => parsePart(p, depth + 1));
+      for (const r of subResults) result.attachments.push(...r.attachments);
+      if (ctMain === 'multipart/alternative') {
+        const subTypes = subParts.map(peekContentType);
+        const plainIdx = subTypes.indexOf('text/plain');
+        if (plainIdx !== -1) {
+          result.text.push(...subResults[plainIdx].text);
         } else {
-          attachments.push(describeAttachment(child));
+          for (const r of subResults) { if (r.text.length) { result.text.push(...r.text); break; } }
         }
-      }
-      return text;
-    }
-  } else if (ct.mainType === "text") {
-    const decoded = decodeTextPartBody(part);
-    if (ct.subType === "html") return htmlToText(decoded);
-    return decoded;
-  } else {
-    attachments.push(describeAttachment(part));
-    return "";
-  }
-}
-
-function createMboxStreamParser(onMessage) {
-  let buffer = "";
-  let currentLines = [];
-  let prevBlank = true;
-  let any = false;
-
-  function handleLine(line) {
-    const isBoundary = prevBlank && line.startsWith("From ");
-    if (isBoundary) {
-      if (any) onMessage(currentLines.join("\n"));
-      currentLines = [line];
-      any = true;
-    } else if (any) {
-      currentLines.push(line.replace(/^>(>*From )/, "$1"));
-    }
-    prevBlank = line === "";
-  }
-
-  return {
-    feed(chunkText) {
-      buffer += chunkText;
-      const lastNL = buffer.lastIndexOf("\n");
-      if (lastNL === -1) return;
-      const completeSection = buffer.slice(0, lastNL);
-      buffer = buffer.slice(lastNL + 1);
-      const lines = completeSection.split("\n");
-      for (const rawLine of lines) {
-        handleLine(rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine);
-      }
-    },
-    end() {
-      if (buffer.length > 0) {
-        handleLine(buffer.endsWith("\r") ? buffer.slice(0, -1) : buffer);
-        buffer = "";
-      }
-      if (any && currentLines.length > 0) {
-        onMessage(currentLines.join("\n"));
-        currentLines = [];
-        any = false;
-      }
-    },
-  };
-}
-
-function formatMessage(rawMessageText, index, options) {
-  options = options || {};
-  const firstNL = rawMessageText.indexOf("\n");
-  const rest = firstNL === -1 ? "" : rawMessageText.slice(firstNL + 1);
-  const attachments = [];
-  let bodyText = "";
-  let headers = [];
-  try {
-    const part = parseMessagePart(rest);
-    headers = part.headers;
-    bodyText = extractContent(part, attachments);
-  } catch (e) {
-    bodyText = "[Could not fully parse this message: " + e.message + "]\n\n" + rest;
-  }
-
-  const get = (name) => decodeRFC2047(getHeader(headers, name));
-
-  let out = "";
-  out += "=".repeat(72) + "\n";
-  out += "Message " + index + "\n";
-  out += "From:    " + get("From") + "\n";
-  out += "To:      " + get("To") + "\n";
-  const cc = get("Cc");
-  if (cc) out += "Cc:      " + cc + "\n";
-  out += "Date:    " + get("Date") + "\n";
-  out += "Subject: " + get("Subject") + "\n";
-  if (options.includeAllHeaders) {
-    const skip = ["from", "to", "cc", "date", "subject"];
-    const extra = headers.filter(([k]) => !skip.includes(k.toLowerCase()));
-    if (extra.length) {
-      out += "-".repeat(72) + "\n";
-      for (const [k, v] of extra) out += k + ": " + decodeRFC2047(v) + "\n";
-    }
-  }
-  out += "=".repeat(72) + "\n\n";
-  out += (bodyText || "").trim() + "\n";
-  if (attachments.length) {
-    out += "\n";
-    for (const a of attachments) out += "[Attachment: " + a + "]\n";
-  }
-  out += "\n\n";
-  return out;
-}
-
-// ============================================================
-// Browser UI glue
-// ============================================================
-
-// Fixed conversion period (local time). Change these two lines to adjust it.
-const RANGE_START = new Date(2026, 2, 1, 0, 0, 0, 0); // March 1, 2026, 00:00:00 local
-const RANGE_END = new Date(2026, 7, 31, 23, 59, 59, 999); // August 31, 2026, 23:59:59.999 local
-const RANGE_LABEL = "Mar 1, 2026 – Aug 31, 2026";
-
-let selectedFile = null;
-let cancelled = false;
-
-const dropzone = document.getElementById("dropzone");
-const fileInput = document.getElementById("fileInput");
-
-["dragenter", "dragover"].forEach((evt) =>
-  dropzone.addEventListener(evt, (e) => {
-    e.preventDefault();
-    dropzone.classList.add("dragover");
-  })
-);
-["dragleave", "drop"].forEach((evt) =>
-  dropzone.addEventListener(evt, (e) => {
-    e.preventDefault();
-    dropzone.classList.remove("dragover");
-  })
-);
-dropzone.addEventListener("drop", (e) => {
-  const file = e.dataTransfer.files && e.dataTransfer.files[0];
-  if (file) selectFile(file);
-});
-dropzone.addEventListener("click", () => fileInput.click());
-document.getElementById("pickFileBtn").addEventListener("click", (e) => {
-  e.stopPropagation();
-  fileInput.click();
-});
-fileInput.addEventListener("change", () => {
-  if (fileInput.files && fileInput.files[0]) selectFile(fileInput.files[0]);
-});
-
-function selectFile(file) {
-  selectedFile = file;
-  document.getElementById("fileNameOut").textContent = file.name || "(unnamed file)";
-  document.getElementById("fileSizeOut").textContent = formatBytes(file.size);
-  const engineNote = document.getElementById("engineNote");
-  if (window.showSaveFilePicker) {
-    engineNote.textContent = "Will save directly to a location you choose, as it converts.";
-  } else {
-    engineNote.textContent =
-      "This browser will hold the result in memory, then download it. For files this large, Chrome or Edge on a computer works best.";
-  }
-  document.getElementById("fileInfo").hidden = false;
-}
-
-function setView(name) {
-  ["ready", "progress", "done", "error"].forEach((v) => {
-    document.getElementById("view-" + v).hidden = v !== name;
-  });
-}
-
-const stageEls = {
-  read: document.querySelector('.stage[data-stage="read"]'),
-  filter: document.querySelector('.stage[data-stage="filter"]'),
-  decode: document.querySelector('.stage[data-stage="decode"]'),
-  write: document.querySelector('.stage[data-stage="write"]'),
-};
-function setStage(name) {
-  for (const key in stageEls) {
-    if (stageEls[key]) stageEls[key].classList.toggle("active", key === name);
-  }
-}
-
-function resetProgressUI() {
-  document.getElementById("progressFill").style.width = "0%";
-  document.getElementById("progressStats").textContent = "0 B / 0 B · 0 of 0 in period";
-  document.getElementById("logWindow").textContent = "";
-}
-
-function updateProgress(offset, total, messageCount, totalScanned, startTime, recentLines) {
-  const pct = Math.min(100, Math.floor((offset / total) * 100));
-  document.getElementById("progressFill").style.width = pct + "%";
-  const elapsed = (Date.now() - startTime) / 1000;
-  const rate = offset / Math.max(elapsed, 0.001);
-  const remaining = rate > 0 ? (total - offset) / rate : 0;
-  let stats =
-    formatBytes(offset) + " / " + formatBytes(total) + " · " + messageCount.toLocaleString() + " of " + totalScanned.toLocaleString() + " in period";
-  if (pct < 100 && remaining > 2) stats += " · ~" + Math.ceil(remaining) + "s left";
-  document.getElementById("progressStats").textContent = stats;
-  const lw = document.getElementById("logWindow");
-  lw.textContent = recentLines.join("\n");
-  lw.scrollTop = lw.scrollHeight;
-}
-
-function formatDateShort(d) {
-  if (!d) return "undated   ";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return y + "-" + m + "-" + day;
-}
-
-function pushLogLine(recentLines, displayIndex, subject, msgDate, included) {
-  const dateStr = formatDateShort(msgDate);
-  const status = included ? "OK" : "SKIP";
-  const line =
-    String(displayIndex).padStart(6, "0") + "  " + dateStr + "  " + (subject || "").slice(0, 30).padEnd(30, " ") + "  " + status;
-  recentLines.push(line);
-  if (recentLines.length > 14) recentLines.shift();
-}
-
-function showDone(info) {
-  setView("done");
-  const el = document.getElementById("doneStats");
-  let html = "";
-  html += '<div class="manifest-line"><span>IN PERIOD</span><span>' + info.messageCount.toLocaleString() + "</span></div>";
-  html += '<div class="manifest-line"><span>TOTAL SCANNED</span><span>' + info.totalScanned.toLocaleString() + "</span></div>";
-  if (info.skippedOutOfRange) {
-    html +=
-      '<div class="manifest-line"><span>OUTSIDE PERIOD</span><span>' + info.skippedOutOfRange.toLocaleString() + "</span></div>";
-  }
-  if (info.skippedUndated) {
-    html +=
-      '<div class="manifest-line"><span>UNDATED, SKIPPED</span><span>' + info.skippedUndated.toLocaleString() + "</span></div>";
-  }
-  if (info.messageCount > 0) {
-    html +=
-      '<div class="manifest-line"><span>' +
-      (info.mode === "saved" ? "SAVED AS" : "DOWNLOADED AS") +
-      "</span><span>" +
-      escapeHtml(info.filename) +
-      "</span></div>";
-    if (info.size) {
-      html += '<div class="manifest-line"><span>OUTPUT SIZE</span><span>' + formatBytes(info.size) + "</span></div>";
-    }
-  }
-  if (info.totalScanned === 0) {
-    html += '<p class="warning-text">No messages were found. Make sure this is a valid .mbox export.</p>';
-  } else if (info.messageCount === 0) {
-    html += '<p class="warning-text">None of the ' + info.totalScanned.toLocaleString() + " messages in this file fell within " + RANGE_LABEL + ".</p>";
-  }
-  el.innerHTML = html;
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
-function showError(msg) {
-  setView("error");
-  document.getElementById("errorMessage").textContent = msg;
-}
-
-document.getElementById("cancelBtn").addEventListener("click", () => {
-  cancelled = true;
-});
-
-document.getElementById("resetBtn").addEventListener("click", () => {
-  selectedFile = null;
-  document.getElementById("fileInfo").hidden = true;
-  fileInput.value = "";
-  setStage(null);
-  setView("ready");
-});
-
-document.getElementById("errorResetBtn").addEventListener("click", () => {
-  setStage(null);
-  setView("ready");
-});
-
-document.getElementById("convertBtn").addEventListener("click", startConversion);
-
-async function startConversion() {
-  const file = selectedFile;
-  if (!file) return;
-  cancelled = false;
-  setView("progress");
-  resetProgressUI();
-
-  const options = { includeAllHeaders: document.getElementById("includeAllHeaders").checked };
-  const outName = (file.name.replace(/\.[^/.]+$/, "") || "mbox-export") + "_2026-03-01_to_2026-08-31.txt";
-
-  let writer = null;
-  let useFSA = false;
-  if (window.showSaveFilePicker) {
-    try {
-      const handle = await window.showSaveFilePicker({
-        suggestedName: outName,
-        types: [{ description: "Text file", accept: { "text/plain": [".txt"] } }],
-      });
-      writer = await handle.createWritable();
-      useFSA = true;
-    } catch (e) {
-      if (e && e.name === "AbortError") {
-        setView("ready");
-        return;
-      }
-      useFSA = false;
-    }
-  }
-
-  setStage("read");
-
-  const outputBlobParts = [];
-  let pendingMessages = [];
-  const splitter = createMboxStreamParser((raw) => pendingMessages.push(raw));
-
-  let messageCount = 0; // included (written) messages
-  let totalScanned = 0; // every message found in the mbox, in or out of period
-  let skippedOutOfRange = 0;
-  let skippedUndated = 0;
-  const CHUNK_SIZE = 16 * 1024 * 1024;
-  const total = file.size || 1;
-  let offset = 0;
-  const startTime = Date.now();
-  const recentLines = [];
-
-  async function drainPending() {
-    while (pendingMessages.length > 0) {
-      if (cancelled) throw { cancelledByUser: true };
-      const raw = pendingMessages.shift();
-      totalScanned++;
-
-      setStage("filter");
-      const meta = extractMessageMeta(raw);
-      const inRange = !!meta.date && meta.date >= RANGE_START && meta.date <= RANGE_END;
-
-      if (inRange) {
-        messageCount++;
-        setStage("decode");
-        const formatted = formatMessage(raw, messageCount, options);
-        if (useFSA) {
-          setStage("write");
-          await writer.write(formatted);
-        } else {
-          outputBlobParts.push(formatted);
-        }
-      } else if (!meta.date) {
-        skippedUndated++;
       } else {
-        skippedOutOfRange++;
+        for (const r of subResults) result.text.push(...r.text);
       }
-      pushLogLine(recentLines, totalScanned, meta.subject, meta.date, inRange);
+    }
+  } else {
+    const isAttachmentDisposition = /attachment/i.test(cd);
+    if (!isAttachmentDisposition) {
+      let decoded = decodeBodyContent(bodyText, cte, charset);
+      if (ctMain.startsWith('text/html')) {
+        decoded = htmlToText(decoded);
+      } else if (!ctMain.startsWith('text/') && ctMain !== '') {
+        decoded = null;
+      }
+      if (decoded !== null && decoded.trim() !== '') result.text.push(decoded);
     }
   }
-
-  try {
-    while (offset < total) {
-      if (cancelled) throw { cancelledByUser: true };
-      const end = Math.min(offset + CHUNK_SIZE, total);
-      const buf = await file.slice(offset, end).arrayBuffer();
-      const text = bytesToBinaryString(new Uint8Array(buf));
-      splitter.feed(text);
-      offset = end;
-
-      await drainPending();
-
-      updateProgress(offset, total, messageCount, totalScanned, startTime, recentLines);
-      await new Promise((r) => setTimeout(r, 0));
-    }
-
-    splitter.end();
-    await drainPending();
-    updateProgress(total, total, messageCount, totalScanned, startTime, recentLines);
-
-    const doneInfo = { messageCount, totalScanned, skippedOutOfRange, skippedUndated, filename: outName };
-    if (useFSA) {
-      setStage("write");
-      await writer.close();
-      showDone({ ...doneInfo, mode: "saved" });
-    } else {
-      const blob = new Blob(outputBlobParts, { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = outName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 30000);
-      showDone({ ...doneInfo, mode: "downloaded", size: blob.size });
-    }
-    setStage(null);
-  } catch (err) {
-    if (useFSA && writer) {
-      try {
-        await writer.close();
-      } catch (_) {}
-    }
-    setStage(null);
-    if (err && err.cancelledByUser) {
-      setView("ready");
-    } else {
-      showError(err && err.message ? err.message : String(err));
-    }
-  }
+  return result;
 }
 
-setView("ready");
+// pulls "DD Mon YYYY" out of an RFC 822-ish date header, returns a UTC-midnight Date or null
+const MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
+function extractDate(dateHeader) {
+  if (!dateHeader) return null;
+  const m = /([0-9]{1,2})\s+([A-Za-z]{3})\s+([0-9]{4})/.exec(dateHeader);
+  if (!m) return null;
+  const mon = MONTHS[m[2].toLowerCase()];
+  if (mon === undefined) return null;
+  return new Date(Date.UTC(parseInt(m[3], 10), mon, parseInt(m[1], 10)));
+}
+
+function processMessage(msgLinesRaw, dateFrom, dateTo, maxBodyChars) {
+  const blankIdx = msgLinesRaw.indexOf('', 1);
+  let headerLines, bodyLines;
+  if (blankIdx === -1) {
+    headerLines = msgLinesRaw.slice(1);
+    bodyLines = [];
+  } else {
+    headerLines = blankIdx > 1 ? msgLinesRaw.slice(1, blankIdx) : [];
+    bodyLines = msgLinesRaw.slice(blankIdx + 1);
+  }
+  const headers = parseHeaderBlock(headerLines);
+  const dateHeader = headers['date'];
+  const msgDate = extractDate(dateHeader);
+  if (!msgDate) return { status: 'no_date' };
+  if (msgDate < dateFrom || msgDate > dateTo) return { status: 'out_of_range' };
+
+  const subject = decodeRfc2047(bytesToUtf8OrLatin1((headers['subject'] || '(no subject)').trim()));
+  const from = decodeRfc2047(bytesToUtf8OrLatin1((headers['from'] || '(unknown sender)').trim()));
+  const to = decodeRfc2047(bytesToUtf8OrLatin1((headers['to'] || '(unknown recipient)').trim()));
+
+  // undo mboxrd-style ">From " escaping in body lines
+  bodyLines = bodyLines.map(l => l.replace(/^>(From )/, '$1'));
+  const bodyTextRaw = bodyLines.join('\n');
+  const fullPartRaw = headerLines.join('\n') + '\n\n' + bodyTextRaw;
+
+  let parsed;
+  try { parsed = parsePart(fullPartRaw); }
+  catch (e) { parsed = { text: [], attachments: [] }; }
+
+  let bodyCombined = cleanWhitespace(parsed.text.join('\n\n'));
+  if (bodyCombined.length > maxBodyChars) {
+    bodyCombined = bodyCombined.slice(0, maxBodyChars) + '\n[... truncated ...]';
+  }
+  if (!bodyCombined) bodyCombined = '(no text content)';
+
+  const attachments = [...new Set(parsed.attachments)];
+  const attachStr = attachments.length ? attachments.join(', ') : '(none)';
+
+  const entry =
+    '#'.repeat(80) + '\n' +
+    'Date: ' + dateHeader.trim() + '\n' +
+    'From: ' + from + '\n' +
+    'To: ' + to + '\n' +
+    'Subject: ' + subject + '\n' +
+    'Attachments: ' + attachStr + '\n' +
+    '-'.repeat(80) + '\n' +
+    bodyCombined + '\n\n';
+
+  return { status: 'written', entry };
+}
+
+const BOUNDARY_RE = /^From \S+ +\S+ +\S+ +[0-9]{1,2} +[0-9]{2}:[0-9]{2}:[0-9]{2} +[0-9]{4}/;
+
+function extractEmails(fileBytes, dateFromStr, dateToStr, maxBodyChars, onProgress) {
+  const raw = bytesToRawString(fileBytes);
+  const normalized = raw.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
+
+  const boundaryIdx = [];
+  for (let i = 0; i < lines.length; i++) if (BOUNDARY_RE.test(lines[i])) boundaryIdx.push(i);
+  if (boundaryIdx.length === 0) throw new Error('No message boundaries found - is this a valid mbox file?');
+
+  const dateFrom = new Date(dateFromStr + 'T00:00:00Z');
+  const dateTo = new Date(dateToStr + 'T00:00:00Z');
+
+  const counts = { written: 0, out_of_range: 0, no_date: 0, error: 0 };
+  const outputChunks = [];
+  const nTotal = boundaryIdx.length;
+
+  for (let i = 0; i < nTotal; i++) {
+    const start = boundaryIdx[i];
+    const end = i < nTotal - 1 ? boundaryIdx[i + 1] : lines.length;
+    const msgLines = lines.slice(start, end);
+    let res;
+    try { res = processMessage(msgLines, dateFrom, dateTo, maxBodyChars); }
+    catch (e) { res = { status: 'error' }; }
+    counts[res.status] = (counts[res.status] || 0) + 1;
+    if (res.status === 'written') outputChunks.push(res.entry);
+    if (onProgress && (i % 500 === 0 || i === nTotal - 1)) onProgress(i + 1, nTotal, counts);
+  }
+
+  return { text: outputChunks.join(''), counts, nTotal };
+}
+
+
+// ---- worker message handling ------------------------------------------
+self.onmessage = async function (e) {
+  const { file, dateFrom, dateTo, maxBodyChars } = e.data;
+  try {
+    self.postMessage({ type: 'status', message: 'Reading file from disk…' });
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    self.postMessage({ type: 'status', message: 'Read ' + bytes.length.toLocaleString() + ' bytes. Scanning for messages…' });
+
+    let lastPost = 0;
+    const result = extractEmails(bytes, dateFrom, dateTo, maxBodyChars, (i, n, counts) => {
+      const now = Date.now();
+      if (now - lastPost > 150 || i === n) {
+        lastPost = now;
+        self.postMessage({ type: 'progress', i, n, counts });
+      }
+    });
+
+    self.postMessage({ type: 'status', message: 'Encoding output…' });
+    const outBytes = new TextEncoder().encode(result.text);
+
+    self.postMessage({
+      type: 'done',
+      counts: result.counts,
+      nTotal: result.nTotal,
+      outputBytes: outBytes,
+      outputSize: outBytes.length,
+    }, [outBytes.buffer]);
+  } catch (err) {
+    self.postMessage({ type: 'error', message: (err && err.message) ? err.message : String(err) });
+  }
+};
+
+</script>
+
+<script>
+(function () {
+  "use strict";
+  var fileInput = document.getElementById('file-input');
+  var filebtn   = document.getElementById('filebtn');
+  var fname     = document.getElementById('fname');
+  var fmeta     = document.getElementById('fmeta');
+  var dateFrom  = document.getElementById('date-from');
+  var dateTo    = document.getElementById('date-to');
+  var maxChars  = document.getElementById('max-chars');
+  var goBtn     = document.getElementById('go-btn');
+  var bar       = document.getElementById('bar');
+  var barFill   = document.getElementById('bar-fill');
+  var logEl     = document.getElementById('log');
+  var resultEl  = document.getElementById('result');
+  var statsEl   = document.getElementById('stats');
+  var dlLink    = document.getElementById('dl-link');
+  var dlText    = document.getElementById('dl-text');
+  var postmark  = document.getElementById('postmark');
+
+  var selectedFile = null;
+  var lastObjectUrl = null;
+
+  function fmtBytes(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
+  function logLine(msg, cls) {
+    var div = document.createElement('div');
+    if (cls) div.className = cls;
+    div.textContent = msg;
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  fileInput.addEventListener('change', function () {
+    var f = fileInput.files[0];
+    if (!f) return;
+    selectedFile = f;
+    filebtn.classList.add('has-file');
+    fname.textContent = f.name;
+    fmeta.textContent = fmtBytes(f.size) + ' \u00b7 selected, not uploaded';
+    goBtn.disabled = false;
+    goBtn.textContent = 'Extract emails';
+    resultEl.classList.remove('show');
+  });
+
+  goBtn.addEventListener('click', function () {
+    if (!selectedFile) return;
+    if (!dateFrom.value || !dateTo.value) {
+      logEl.classList.add('show');
+      logLine('Please choose both a "from" date and a "to" date.', 'l-err');
+      return;
+    }
+    if (dateFrom.value > dateTo.value) {
+      logEl.classList.add('show');
+      logLine('The "from" date is after the "to" date.', 'l-err');
+      return;
+    }
+    startExtraction();
+  });
+
+  function startExtraction() {
+    goBtn.disabled = true;
+    goBtn.textContent = 'Working\u2026';
+    logEl.classList.add('show');
+    logEl.innerHTML = '';
+    bar.style.display = 'block';
+    barFill.style.width = '0%';
+    resultEl.classList.remove('show');
+    if (lastObjectUrl) { URL.revokeObjectURL(lastObjectUrl); lastObjectUrl = null; }
+
+    var workerSrc = document.getElementById('worker-source').textContent;
+    var blob = new Blob([workerSrc], { type: 'application/javascript' });
+    var workerUrl = URL.createObjectURL(blob);
+    var worker = new Worker(workerUrl);
+
+    var maxBodyCharsVal = maxChars.value ? parseInt(maxChars.value, 10) : Infinity;
+    if (isNaN(maxBodyCharsVal) || maxBodyCharsVal <= 0) maxBodyCharsVal = Infinity;
+
+    logLine('Starting in a background worker \u2014 this tab stays responsive.');
+
+    worker.onmessage = function (e) {
+      var d = e.data;
+      if (d.type === 'status') {
+        logLine(d.message);
+      } else if (d.type === 'progress') {
+        var pct = d.n ? Math.round((d.i / d.n) * 100) : 0;
+        barFill.style.width = pct + '%';
+        logLine('Processed ' + d.i.toLocaleString() + ' / ' + d.n.toLocaleString() +
+          ' messages\u2026 (' + (d.counts.written || 0).toLocaleString() + ' matched so far)');
+      } else if (d.type === 'done') {
+        barFill.style.width = '100%';
+        logLine('Done.', 'l-ok');
+        finish(d);
+        worker.terminate();
+        URL.revokeObjectURL(workerUrl);
+      } else if (d.type === 'error') {
+        logLine('Error: ' + d.message, 'l-err');
+        resetButton();
+        worker.terminate();
+        URL.revokeObjectURL(workerUrl);
+      }
+    };
+    worker.onerror = function (e) {
+      logLine('Error: ' + (e.message || 'the worker crashed unexpectedly.'), 'l-err');
+      resetButton();
+    };
+
+    worker.postMessage({
+      file: selectedFile,
+      dateFrom: dateFrom.value,
+      dateTo: dateTo.value,
+      maxBodyChars: maxBodyCharsVal
+    });
+  }
+
+  function resetButton() {
+    goBtn.disabled = false;
+    goBtn.textContent = 'Try again';
+  }
+
+  function finish(d) {
+    var blob = new Blob([d.outputBytes], { type: 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    lastObjectUrl = url;
+    var baseName = (selectedFile.name || 'emails').replace(/\.[^./\\]+$/, '');
+    var outName = baseName + '_' + dateFrom.value + '_to_' + dateTo.value + '.txt';
+    dlLink.href = url;
+    dlLink.download = outName;
+    dlText.textContent = 'Download ' + outName;
+
+    statsEl.innerHTML = '';
+    var rows = [
+      ['Messages in file', d.nTotal],
+      ['Matched & extracted', d.counts.written || 0],
+      ['Outside date range', d.counts.out_of_range || 0],
+      ['No readable date', d.counts.no_date || 0],
+      ['Output size', fmtBytes(d.outputSize)]
+    ];
+    rows.forEach(function (r) {
+      var row = document.createElement('div');
+      var label = document.createElement('span');
+      label.textContent = r[0];
+      var val = document.createElement('b');
+      val.textContent = typeof r[1] === 'number' ? r[1].toLocaleString() : r[1];
+      row.appendChild(label);
+      row.appendChild(val);
+      statsEl.appendChild(row);
+    });
+
+    drawPostmark(postmark);
+    resultEl.classList.add('show');
+    goBtn.disabled = false;
+    goBtn.textContent = 'Extract emails';
+  }
+
+  function drawPostmark(svg) {
+    var today = new Date();
+    var dateStr = today.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+    var ns = 'http://www.w3.org/2000/svg';
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    function el(tag, attrs) {
+      var e = document.createElementNS(ns, tag);
+      for (var k in attrs) e.setAttribute(k, attrs[k]);
+      return e;
+    }
+
+    var defs = el('defs', {});
+    var path = el('path', { id: 'pmCircle', d: 'M 60,60 m -46,0 a 46,46 0 1,1 92,0 a 46,46 0 1,1 -92,0' });
+    defs.appendChild(path);
+    svg.appendChild(defs);
+
+    svg.appendChild(el('circle', { cx: 60, cy: 60, r: 54, fill: 'none', stroke: '#1B2430', 'stroke-width': 1.5 }));
+    svg.appendChild(el('circle', { cx: 60, cy: 60, r: 38, fill: 'none', stroke: '#1B2430', 'stroke-width': 1.2 }));
+
+    var text = el('text', { 'font-size': 7.6, 'letter-spacing': 2.2, fill: '#1B2430', 'font-family': 'ui-monospace,Menlo,Consolas,monospace', 'font-weight': 700 });
+    var textPath = el('textPath', {});
+    textPath.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#pmCircle');
+    textPath.setAttribute('href', '#pmCircle');
+    textPath.setAttribute('startOffset', '2%');
+    textPath.textContent = 'PROCESSED LOCALLY \u2022 NO NETWORK USED \u2022 ';
+    text.appendChild(textPath);
+    svg.appendChild(text);
+
+    var line1 = el('text', { x: 60, y: 57, 'text-anchor': 'middle', 'font-size': 9.5, 'font-weight': 800, fill: '#1B2430', 'font-family': 'ui-monospace,Menlo,Consolas,monospace' });
+    line1.textContent = dateStr;
+    svg.appendChild(line1);
+
+    var line2 = el('text', { x: 60, y: 71, 'text-anchor': 'middle', 'font-size': 7.5, fill: '#2C5F8A', 'font-family': 'ui-monospace,Menlo,Consolas,monospace', 'font-weight': 700 });
+    line2.textContent = 'THIS DEVICE ONLY';
+    svg.appendChild(line2);
+
+    for (var i = 0; i < 10; i++) {
+      var ang = (i / 10) * Math.PI * 2;
+      var r1 = 56, r2 = 61;
+      svg.appendChild(el('line', {
+        x1: 60 + Math.cos(ang) * r1, y1: 60 + Math.sin(ang) * r1,
+        x2: 60 + Math.cos(ang) * r2, y2: 60 + Math.sin(ang) * r2,
+        stroke: '#C0392B', 'stroke-width': 1.1, opacity: 0.7
+      }));
+    }
+  }
+})();
+
 </script>
 </body>
 </html>
